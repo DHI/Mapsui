@@ -205,17 +205,25 @@ public class LabelStyle : BaseStyle
     /// <remarks>Used only when LabelMethod is not set. Overrides use of the Text field.</remarks>
     public string? LabelColumn { get; set; }
 
-    /// <summary>Method used by GetLabelText to return the label text.</summary>
-    /// <remarks>Overrides use of Text and LabelColumn fields.</remarks>
-    public Func<IFeature, string?>? LabelMethod { get; set; }
+    #region Added for MikePlus
+    /// <summary>callback to add LabelColumn string to columns</summary>
+    public Func<IFeature, int?, string?, bool>? LabelMethod { get; set; }
 
+    /// <summary>double decimal place</summary>
+    public int? DecimalPlace { get; set; }
+    #endregion
+
+    #region Update for MikePlus
     /// <summary>The text used for this specific label.</summary>
     public string? GetLabelText(IFeature feature)
     {
-        if (LabelMethod != null) return LabelMethod(feature);
-        if (LabelColumn != null) return feature[LabelColumn]?.ToString();
+        if (LabelMethod != null && LabelColumn != null)
+            LabelMethod(feature, DecimalPlace, LabelColumn);
+
+        if (LabelColumn != null && feature[LabelColumn] != null)
+            return feature[LabelColumn]!.ToString();
+
         return Text;
     }
-
-
+    #endregion
 }
