@@ -85,12 +85,13 @@ public class VectorStyle : BaseStyle
     /// </summary>
     public Func<IFeature, string?, bool>? UniqueValueMethod { get; set; }
 
+    [Flags]
     public enum StyleTypes
     {
-        None = 0,
-        Point,
-        Polyline,
-        Polygon
+        None = 0x0,
+        Point = 0x1,
+        Polyline = 0x2,
+        Polygon = 0x4
     }
 
     public enum ArrowPosition

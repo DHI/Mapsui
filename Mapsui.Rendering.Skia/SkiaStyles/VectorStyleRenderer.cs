@@ -31,15 +31,15 @@ public class VectorStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                     break;
                 case Point point:
                     //update for MikePlus
-                    if (vectorStyle.StyleType == VectorStyle.StyleTypes.Point || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
+                    if (vectorStyle.StyleType.HasFlag(VectorStyle.StyleTypes.Point) || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
                         SymbolStyleRenderer.DrawStatic(canvas, viewport, layer, point.X, point.Y, CreateSymbolStyle(vectorStyle), renderService, feature);
                     break;
                 case Polygon polygon:
-                    if (vectorStyle.StyleType == VectorStyle.StyleTypes.Polygon || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
+                    if (vectorStyle.StyleType.HasFlag(VectorStyle.StyleTypes.Polygon) || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
                         PolygonRenderer.Draw(canvas, viewport, vectorStyle, feature, polygon, opacity, renderService.VectorCache, position);
                     break;
                 case LineString lineString:
-                    if (vectorStyle.StyleType == VectorStyle.StyleTypes.Polyline || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
+                    if (vectorStyle.StyleType.HasFlag(VectorStyle.StyleTypes.Polyline) || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
                         LineStringRenderer.Draw(canvas, viewport, vectorStyle, feature, lineString, opacity, renderService, position);
                     break;
                 case null: // A geometry may be null. It might be a mistake but logging in the renderer would flood the log.
@@ -55,7 +55,7 @@ public class VectorStyleRenderer : ISkiaStyleRenderer, IFeatureSize
             {
                 case PointFeature pointFeature:
                     //update for MikePlus
-                    if (vectorStyle.StyleType == VectorStyle.StyleTypes.Point || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
+                    if (vectorStyle.StyleType.HasFlag(VectorStyle.StyleTypes.Point) || vectorStyle.StyleType == VectorStyle.StyleTypes.None)
                         SymbolStyleRenderer.DrawStatic(canvas, viewport, layer, pointFeature.Point.X, pointFeature.Point.Y, CreateSymbolStyle(vectorStyle), renderService, feature);
                     break;
                 case GeometryFeature geometryFeature:
