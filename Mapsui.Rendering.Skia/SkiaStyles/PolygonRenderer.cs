@@ -6,6 +6,7 @@ using Mapsui.Styles;
 using NetTopologySuite.Geometries;
 using SkiaSharp;
 using System;
+using System.Linq;
 
 namespace Mapsui.Rendering.Skia;
 
@@ -16,6 +17,7 @@ internal static class PolygonRenderer
     /// </summary>
     private const float _scale = 10.0f;
 
+    #region Update for MikeOlus.
     public static void Draw(SKCanvas canvas, Viewport viewport, VectorStyle vectorStyle, IFeature feature,
         Polygon polygon, float opacity, VectorCache vectorCache, int position)
     {
@@ -29,6 +31,9 @@ internal static class PolygonRenderer
         if (vectorStyle == null)
             return;
 
+        if (feature == null)
+            return;
+
         var extent = viewport.ToExtent();
         var rotation = viewport.Rotation;
         float lineWidth = (float)(vectorStyle.Outline?.Width ?? 1);
@@ -36,7 +41,119 @@ internal static class PolygonRenderer
         using var path = vectorCache.GetOrCreate((feature.Id, position, extent, rotation, lineWidth), ToPath);
         if (vectorStyle.Fill.IsVisible())
         {
+            Pen? classBreakPen = null;
+            //If has unique values, use unique styles first
+            if (vectorStyle.UniqueValueMethod != null && vectorStyle.UniqueValueField != null
+                && vectorStyle.UniqueValueItems != null && vectorStyle.UniqueValueItems.Count > 0)
+            {
+                VectorStyle? uniqueVectorStyle = null;
+                bool columnSuc = false;
+                columnSuc = vectorStyle.UniqueValueMethod(feature, vectorStyle.UniqueValueField);
+                if (columnSuc)
+                {
+                    if (double.TryParse(feature[vectorStyle.UniqueValueField]?.ToString(), out double val))
+                    {
+                        var uniqueItem = vectorStyle.UniqueValueItems.Where(cb => cb.Value == val);
+                        if (uniqueItem != null && uniqueItem.First() != null
+                            && uniqueItem.First().ValueStyle is StyleCollection coll
+                            && coll.Styles.First() is VectorStyle vector)
+                        {
+                            uniqueVectorStyle = vector;
+                        }
+
+                        //It means the value has no unique style, then use default style, if default style is setted
+                        if (uniqueVectorStyle == null && vectorStyle.OtherValueStyle != null
+                            && vectorStyle.OtherValueStyle is StyleCollection coll2
+                            && coll2.Styles.First() is VectorStyle defaultStyle)
+                            uniqueVectorStyle = defaultStyle;
+                    }
+                }
+
+                //If uniqueVectorStyle is null, stop drawing the polygon
+                if (uniqueVectorStyle != null)
+                {
+                    using var fillPaintU = vectorCache.GetOrCreate((uniqueVectorStyle.Fill, opacity, viewport.Rotation), CreateSkPaint);
+                    DrawPath(canvas, uniqueVectorStyle, path, fillPaintU);
+
+                    if (uniqueVectorStyle.Outline.IsVisible())
+                    {
+                        using var paint = vectorCache.GetOrCreate((uniqueVectorStyle.Outline, opacity), CreateSkPaint);
+                        canvas.DrawPath(path, paint);
+                    }
+                }
+                return;
+            }
+
+            //If  has class breaks, use break styles secondly
+            if (vectorStyle.ClassBreakMethod != null && vectorStyle.ClassBreakField != null
+                    && vectorStyle.ClassBreaks != null && vectorStyle.ClassBreaks.Count > 0)
+            {
+                VectorStyle? breakVectorStyle = null;
+                bool columnSuc = false;
+                columnSuc = vectorStyle.ClassBreakMethod(feature, vectorStyle.ClassBreakField);
+                if (columnSuc)
+                {
+                    if (double.TryParse(feature[vectorStyle.ClassBreakField]?.ToString(), out double val))
+                    {
+                        var sortedBreaks = vectorStyle.ClassBreaks.OrderBy(cb => cb.BreakValue).ToList();
+
+                        for (int i = 0; i < sortedBreaks.Count - 1; i++)
+                        {
+                            var currentBreak = sortedBreaks[i];
+                            var nextBreak = sortedBreaks[i + 1];
+                            if (val >= currentBreak.BreakValue && val < nextBreak.BreakValue)
+                            {
+                                //case 1: entire vector style for Type: Range values
+                                if (currentBreak.ClassBreakStyle is StyleCollection coll1 && coll1.Styles.First() is VectorStyle vector1)
+                                {
+                                    breakVectorStyle = vector1;
+                                }
+                                //case 2: only Pen with color and width for Type: Graduated color and Graduated size
+                                else if (currentBreak.ClassBreakStyle is Pen pen1)
+                                {
+                                    classBreakPen = pen1;
+                                }
+                                break;
+                            }
+                        }
+
+                        //use last style as default
+                        if (breakVectorStyle == null && sortedBreaks.Last().ClassBreakStyle is StyleCollection coll && coll.Styles.First() is VectorStyle vector)
+                        {
+                            breakVectorStyle = vector;
+                        }
+                        if (classBreakPen == null && sortedBreaks.Last().ClassBreakStyle is Pen pen)
+                        {
+                            classBreakPen = pen;
+                        }
+                    }
+                }
+
+                if (breakVectorStyle == null && classBreakPen == null)
+                    return;
+
+                if (breakVectorStyle != null)
+                {
+                    using var fillPaintB = vectorCache.GetOrCreate((breakVectorStyle.Fill, opacity, viewport.Rotation), CreateSkPaint);
+                    DrawPath(canvas, breakVectorStyle, path, fillPaintB);
+
+                    if (breakVectorStyle.Outline.IsVisible())
+                    {
+                        using var paint = vectorCache.GetOrCreate((breakVectorStyle.Outline, opacity), CreateSkPaint);
+                        canvas.DrawPath(path, paint);
+                    }
+                    return;
+                }
+            }
+
+            //General style with class break Pen or not
             using var fillPaint = vectorCache.GetOrCreate((vectorStyle.Fill, opacity, viewport.Rotation), CreateSkPaint);
+            if (classBreakPen != null)
+            {
+                var fillColor = classBreakPen.Color;
+                fillPaint.Instance.Color = fillColor.ToSkia(opacity);
+            }
+
             DrawPath(canvas, vectorStyle, path, fillPaint);
         }
 
@@ -46,6 +163,7 @@ internal static class PolygonRenderer
             canvas.DrawPath(path, paint);
         }
     }
+    #endregion
 
     internal static void DrawPath(SKCanvas canvas, VectorStyle vectorStyle, CacheTracker<SKPath> path, CacheTracker<SKPaint> paintFill)
     {

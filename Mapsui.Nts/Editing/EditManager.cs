@@ -1,9 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using Mapsui.Layers;
+﻿using Mapsui.Layers;
 using Mapsui.Nts.Extensions;
 using NetTopologySuite.Geometries;
+using System;
+using System.Collections.Generic;
+using System.Linq;
 
 namespace Mapsui.Nts.Editing;
 
@@ -34,11 +34,28 @@ public class EditManager
     public int VertexRadius { get; set; } = 12;
     public bool SelectMode { get; set; }
 
+    #region Added for DHI
+    public event EventHandler<DragingArgs>? UpdateDragingPoint;
+    public event EventHandler<DragingArgs>? UserDefinedDraggingFeature;
+    public event EventHandler<CoordinateEditingArgs>? CoordinateMoving;
+    public event EventHandler<DragingArgs>? FeatureDragging;
+    public event EventHandler<CoordinateEditingArgs>? CoordinateDeleting;
+    public event EventHandler<CoordinateEditingArgs>? CoordinateAdding;
+    public event EventHandler<VertexAddingArgs>? StartAdding;
+    public event EventHandler<VertexAddingArgs>? KeepDrawing;
+    public event EventHandler<VertexAddingArgs>? DrawingLineVertexAdding;
+    public event EventHandler<AddShapeArgs>? DrawingLineVertexAdded;
+    public event EventHandler<VertexArgs>? VertexHovering;
+    public event EventHandler<AddShapeArgs>? EditEnded;
+    #endregion
+
     public bool EndEdit()
     {
         if (_addInfo.Feature is null) return false;
         if (_addInfo.Vertices is null) return false;
 
+        // Added for DHI
+        AddShapeArgs? args = null;
         if (EditMode == EditMode.DrawingLine)
         {
             _addInfo.Vertices.RemoveAt(_addInfo.Vertices.Count - 1); // Remove the last vertex, because it is the hover vertex
@@ -53,6 +70,7 @@ public class EditManager
             }
 
             _addInfo.Feature.Geometry = new LineString(_addInfo.Vertices.ToArray());
+            args = new(_addInfo.Feature.Geometry.Copy());
 
             _addInfo.Feature = null;
             _addInfo.Vertex = null;
@@ -61,12 +79,13 @@ public class EditManager
         else if (EditMode == EditMode.DrawingPolygon)
         {
             var polygon = _addInfo.Feature.Geometry as Polygon;
-            if (polygon == null) return false;
+            if (polygon == null || polygon.Area == 0) return false;
 
             _addInfo.Vertices.RemoveAt(_addInfo.Vertices.Count - 1); // Remove the last vertex, because it is the hover vertex
             var linearRing = _addInfo.Vertices.ToList();
             linearRing.Add(linearRing[0].Copy()); // Add first coordinate at end to close the ring.
             _addInfo.Feature.Geometry = new Polygon(new LinearRing(linearRing.ToArray()));
+            args = new(_addInfo.Feature.Geometry.Copy());
 
             _addInfo.Feature.Modified(); // You need to clear the cache to see changes.
             _addInfo.Feature = null;
@@ -74,6 +93,10 @@ public class EditManager
             EditMode = EditMode.AddPolygon;
             Layer?.DataHasChanged();
         }
+        #region Added for DHI
+        if (args != null)
+            EditEnded?.Invoke(this, args);
+        #endregion
 
         return false;
     }
@@ -82,7 +105,15 @@ public class EditManager
     {
         if (_addInfo.Vertex != null)
         {
-            _addInfo.Vertex.SetXY(mapInfo.WorldPosition);
+            #region Added for DHI
+            var worldPosition = mapInfo.WorldPosition;
+            var args = new VertexArgs(mapInfo.WorldPosition.ToCoordinate());
+            VertexHovering?.Invoke(this, args);
+            if (args.VertexHandled && args.Vertex != null)
+                worldPosition = args.Vertex.ToMPoint();
+            #endregion
+
+            _addInfo.Vertex.SetXY(worldPosition);
             _addInfo.Feature?.Modified();
             Layer?.DataHasChanged();
         }
@@ -90,10 +121,30 @@ public class EditManager
 
     public bool AddVertex(Coordinate worldPosition)
     {
+        #region Added for DHI
+        var args = new VertexAddingArgs(worldPosition);
+        if (EditMode is EditMode.AddPoint or EditMode.AddLine or EditMode.AddPolygon)
+        {
+            StartAdding?.Invoke(this, args);
+        }
+        else if (EditMode is EditMode.DrawingLine or EditMode.DrawingPolygon)
+        {
+            KeepDrawing?.Invoke(this, args);
+        }
+        if (args.Cancel)
+            return false;
+        if (args.VertexHandled && args.Vertex != null)
+            worldPosition = args.Vertex;
+        #endregion
+
         if (EditMode == EditMode.AddPoint)
         {
             Layer?.Add(new GeometryFeature { Geometry = worldPosition.ToMPoint().ToPoint() });
             Layer?.DataHasChanged();
+            #region Added for DHI
+            var addPntArgs = new AddShapeArgs(worldPosition.ToMPoint().ToPoint());
+            EditEnded?.Invoke(this, addPntArgs);
+            #endregion
         }
         else if (EditMode == EditMode.AddLine)
         {
@@ -112,14 +163,27 @@ public class EditManager
             if (_addInfo.Feature is null) return false;
             if (_addInfo.Vertices is null) return false;
 
+            #region Added for DHI
+            DrawingLineVertexAdding?.Invoke(this, args);
+            if (args.Cancel)
+            {
+                return false;
+            }
+            #endregion
             // Set the final position of the 'hover' vertex (that was already part of the geometry)
             _addInfo.Vertex.SetXY(worldPosition);
             _addInfo.Vertex = worldPosition.Copy(); // and create a new hover vertex
             _addInfo.Vertices.Add(_addInfo.Vertex);
-            _addInfo.Feature.Geometry = new LineString(_addInfo.Vertices.ToArray());
+            var newLine = new LineString(_addInfo.Vertices.ToArray());
+            _addInfo.Feature.Geometry = newLine;
 
             _addInfo.Feature?.Modified();
             Layer?.DataHasChanged();
+
+            #region Added for DHI
+            var addShapeArg = new AddShapeArgs(newLine);
+            DrawingLineVertexAdded?.Invoke(this, addShapeArg);
+            #endregion
         }
         else if (EditMode == EditMode.AddPolygon)
         {
@@ -205,10 +269,37 @@ public class EditManager
 
         if (_dragInfo.Vertex != null)
         {
+            #region Added for DHI
+            var args = new DragingArgs(_dragInfo.Feature, _dragInfo.Vertex, worldPosition);
+            UpdateDragingPoint?.Invoke(this, args);
+            if (args.PointHandled)
+                worldPosition = args.WorldPosition;
+            #endregion
             // only modify the vertex if it is not moving a feature
             if (!_dragInfo.DraggingFeature)
             {
-                _dragInfo.Vertex.SetXY(worldPosition.ToMPoint() - _dragInfo.StartOffsetToVertex);
+                #region Added for DHI
+                if (_dragInfo.Feature.Geometry is Point)
+                {
+                    FeatureDragging?.Invoke(this, args);
+                    if (args.Cancel)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    var editArgs = new CoordinateEditingArgs(_dragInfo.Feature, _dragInfo.Vertex);
+                    CoordinateMoving?.Invoke(this, editArgs);
+                    if (args.Cancel)
+                        return false;
+                }
+
+                if (args.PointHandled)
+                    _dragInfo.Vertex.SetXY(worldPosition.ToMPoint());
+                else
+                    _dragInfo.Vertex.SetXY(worldPosition.ToMPoint() - _dragInfo.StartOffsetToVertex);
+                #endregion
 
                 if (_dragInfo.Feature.Geometry is Polygon polygon)
                 {
@@ -232,26 +323,43 @@ public class EditManager
                 MPoint previousVertex = _dragInfo.Vertex.ToMPoint(); // record the previous position
                 MPoint newVertex = worldPosition.ToMPoint() - _dragInfo.StartOffsetToVertex; // new position
 
-                if (_dragInfo.Feature.Geometry is Polygon polygon)
+                #region Added for DHI
+                args = new DragingArgs(_dragInfo.Feature, _dragInfo.Vertex, newVertex.ToPoint());
+                FeatureDragging?.Invoke(this, args);
+                if (args.Cancel)
                 {
-                    var vertices = polygon.ExteriorRing?.Coordinates ?? Array.Empty<Coordinate>();
-                    foreach (Coordinate vtx in vertices) // Modify every vertex on the ring
-                    {
-                        vtx.SetXY(vtx.ToMPoint() + (newVertex - previousVertex)); // Adding the offset
-                    }
+                    return false;
                 }
-                else if (_dragInfo.Feature.Geometry is LineString lineString)
+                UserDefinedDraggingFeature?.Invoke(this, args);
+                if (UserDefinedDraggingFeature != null && !args.Cancel)
                 {
-                    var vertices = lineString.Coordinates ?? Array.Empty<Coordinate>();
-                    foreach (Coordinate vtx in vertices) // modify every vertex on the line
-                    {
-                        vtx.SetXY(vtx.ToMPoint() + (newVertex - previousVertex)); // Adding the offset
-                    }
+                    _dragInfo.Feature = args.Feature;
                 }
-                else if (_dragInfo.Feature.Geometry is Point point)
+                #endregion
+                else
                 {
-                    var vertex = point.Coordinate;
-                    vertex.SetXY(vertex.ToMPoint() + (newVertex - previousVertex)); // Adding the offset
+                    // Default dragging behavior
+                    if (_dragInfo.Feature.Geometry is Polygon polygon)
+                    {
+                        var vertices = polygon.ExteriorRing?.Coordinates ?? Array.Empty<Coordinate>();
+                        foreach (Coordinate vtx in vertices) // Modify every vertex on the ring
+                        {
+                            vtx.SetXY(vtx.ToMPoint() + (newVertex - previousVertex)); // Adding the offset
+                        }
+                    }
+                    else if (_dragInfo.Feature.Geometry is LineString lineString)
+                    {
+                        var vertices = lineString.Coordinates ?? Array.Empty<Coordinate>();
+                        foreach (Coordinate vtx in vertices) // modify every vertex on the line
+                        {
+                            vtx.SetXY(vtx.ToMPoint() + (newVertex - previousVertex)); // Adding the offset
+                        }
+                    }
+                    else if (_dragInfo.Feature.Geometry is Point point)
+                    {
+                        var vertex = point.Coordinate;
+                        vertex.SetXY(vertex.ToMPoint() + (newVertex - previousVertex)); // Adding the offset
+                    }
                 }
 
                 _dragInfo.Vertex.SetXY(worldPosition.ToMPoint() - _dragInfo.StartOffsetToVertex);
@@ -283,6 +391,13 @@ public class EditManager
                 var index = vertices.IndexOf(vertexTouched);
                 if (index >= 0)
                 {
+                    #region Added for DHI
+                    var args = new CoordinateEditingArgs(geometryFeature, vertexTouched);
+                    CoordinateDeleting?.Invoke(this, args);
+                    if (args.Cancel)
+                        return false;
+                    #endregion
+
                     geometryFeature.Geometry = geometryFeature.Geometry.DeleteCoordinate(index);
                     geometryFeature.Modified();
                     Layer?.DataHasChanged();
@@ -302,6 +417,14 @@ public class EditManager
             var vertices = geometryFeature.Geometry.MainCoordinates();
             if (EditHelper.ShouldInsert(mapInfo.WorldPosition, mapInfo.Resolution, vertices, VertexRadius, out var segment))
             {
+                #region Added for DHI
+                var args = new CoordinateEditingArgs(geometryFeature, mapInfo.WorldPosition.ToCoordinate());
+                CoordinateAdding?.Invoke(this, args);
+                if (args.Cancel)
+                {
+                    return false;
+                }
+                #endregion
                 geometryFeature.Geometry = geometryFeature.Geometry.InsertCoordinate(mapInfo.WorldPosition.ToCoordinate(), segment);
                 geometryFeature.Modified();
                 Layer?.DataHasChanged();
@@ -385,7 +508,6 @@ public class EditManager
             _scaleInfo.Center.Distance(worldPosition) /
             _scaleInfo.Center.Distance(_scaleInfo.PreviousPosition);
 
-
         if (_scaleInfo.Feature.Geometry != null)
             Geomorpher.Scale(_scaleInfo.Feature.Geometry, scale, _scaleInfo.Center);
 
@@ -430,3 +552,37 @@ public class EditManager
         return Layer.Extent.Grow(Layer.Extent.Width * 0.2);
     }
 }
+
+#region Added for DHI
+public class DragingArgs(GeometryFeature feature, Coordinate vertex, Point worldPosition) : EventArgs
+{
+    public GeometryFeature Feature { get; set; } = feature;
+    public Coordinate Vertex { get; } = vertex;
+    public Point WorldPosition { get; set; } = worldPosition;
+    public bool Cancel { get; set; } = false;
+    public bool PointHandled { get; set; } = false;
+}
+
+public class CoordinateEditingArgs(GeometryFeature affectedfeature, Coordinate editingCoordinate) : EventArgs
+{
+    public GeometryFeature AffectedFeature { get; } = affectedfeature;
+    public Coordinate EditingCoordinate { get; } = editingCoordinate;
+    public bool Cancel { get; set; } = false;
+}
+
+public class VertexAddingArgs(Coordinate addingVertex) : VertexArgs(addingVertex)
+{
+    public bool Cancel { get; set; } = false;
+}
+
+public class VertexArgs(Coordinate vertex) : EventArgs
+{
+    public Coordinate Vertex { get; set; } = vertex;
+    public bool VertexHandled { get; set; } = false;
+}
+
+public class AddShapeArgs(Geometry geometry) : EventArgs
+{
+    public Geometry AddShape { get; set; } = geometry;
+}
+#endregion
