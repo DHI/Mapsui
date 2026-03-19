@@ -13,6 +13,8 @@ using System.Text;
 using Mapsui.Extensions;
 using Mapsui.Rendering.Skia.Images;
 using Mapsui.Rendering.Caching;
+using Mapsui.Nts.Extensions;
+using NetTopologySuite.LinearReferencing;
 
 namespace Mapsui.Rendering.Skia;
 
@@ -44,6 +46,8 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
             if (string.IsNullOrEmpty(text))
                 return false;
 
+            LengthIndexedLine indexedLine;
+            double midIndex;
             switch (feature)
             {
                 case (PointFeature pointFeature):
@@ -51,15 +55,22 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                     DrawLabel(canvas, (float)pointX, (float)pointY, labelStyle, text, (float)layer.Opacity, renderService);
                     break;
                 case (LineString lineStringFeature):
-                    if (feature.Extent == null)
-                        return false;
-                    var (lineStringCenterX, lineStringCenterY) = viewport.WorldToScreenXY(feature.Extent.Centroid.X, feature.Extent.Centroid.Y);
+                    indexedLine = new LengthIndexedLine(lineStringFeature);
+                    midIndex = lineStringFeature.Length / 2.0;
+                    var midPoint = indexedLine.ExtractPoint(midIndex);
+                    var (lineStringCenterX, lineStringCenterY) = viewport.WorldToScreenXY(midPoint.X, midPoint.Y);
                     DrawLabel(canvas, (float)lineStringCenterX, (float)lineStringCenterY, labelStyle, text, (float)layer.Opacity, renderService);
                     break;
                 case (GeometryFeature polygonFeature):
                     if (polygonFeature.Extent is null)
                         return false;
                     var worldCenter = polygonFeature.Extent.Centroid;
+                    if (polygonFeature.Geometry is LineString line)
+                    {
+                        indexedLine = new LengthIndexedLine(line);
+                        midIndex = line.Length / 2.0;
+                        worldCenter = indexedLine.ExtractPoint(midIndex).ToMPoint();
+                    }
                     var (polygonCenterX, polygonCenterY) = viewport.WorldToScreenXY(worldCenter.X, worldCenter.Y);
                     DrawLabel(canvas, (float)polygonCenterX, (float)polygonCenterY, labelStyle, text, (float)layer.Opacity, renderService);
                     break;
