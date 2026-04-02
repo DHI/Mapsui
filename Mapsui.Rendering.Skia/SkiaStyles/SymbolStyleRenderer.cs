@@ -98,6 +98,12 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                         //case 1: vector style
                         if (uniqueStyle is SymbolStyle uniqueVectorStyle)
                         {
+                            if (symbolStyle.SymbolScale != uniqueVectorStyle.SymbolScale)
+                            {
+                                var factor = (float)(uniqueVectorStyle.SymbolScale / symbolStyle.SymbolScale);
+                                canvas.Scale(factor, factor);
+                            }
+
                             using var fillPaint = renderService.VectorCache.GetOrCreate((uniqueVectorStyle.Fill!, opacity), CreateFillPaint);
                             using var pathU = renderService.VectorCache.GetOrCreate(uniqueVectorStyle.SymbolType, CreatePath);
                             canvas.DrawPath(pathU, fillPaint);
@@ -132,7 +138,12 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                     {
                         if (double.TryParse(_feature[symbolStyle.ClassBreakField]?.ToString(), out double val))
                         {
-                            var sortedBreaks = symbolStyle.ClassBreaks.OrderBy(cb => cb.BreakValue).ToList();
+                            var sortedBreaks = symbolStyle.ClassBreaks.Select(cb =>
+                            {
+                                cb.BreakValue = Math.Round(cb.BreakValue, 3);
+                                return cb;
+                            }).OrderBy(cb => cb.BreakValue)
+                            .ToList();
 
                             for (int i = 0; i < sortedBreaks.Count - 1; i++)
                             {
@@ -177,6 +188,12 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                         //case 1: vector style
                         if (breakVectorStyle is SymbolStyle breakSymbolStyle)
                         {
+                            if (symbolStyle.SymbolScale != breakSymbolStyle.SymbolScale)
+                            {
+                                var factor = (float)(breakSymbolStyle.SymbolScale / symbolStyle.SymbolScale);
+                                canvas.Scale(factor, factor);
+                            }
+
                             using var pathB = renderService.VectorCache.GetOrCreate(breakSymbolStyle.SymbolType, CreatePath);
                             if (breakSymbolStyle.Outline.IsVisible())
                             {
@@ -207,6 +224,12 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                     var fillColor = classBreakPen.Color;
                     fillPaintG.Instance.Color = fillColor.ToSkia(opacity);
                     fillPaintG.Instance.StrokeWidth = (float)classBreakPen.Width;
+
+                    if (symbolStyle.SymbolScale != classBreakPen.Width && classBreakPen.Width != 1)
+                    {
+                        var factor = (float)(classBreakPen.Width / symbolStyle.SymbolScale);
+                        canvas.Scale(factor, factor);
+                    }
                 }
 
                 canvas.DrawPath(path, fillPaintG);
