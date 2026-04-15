@@ -32,8 +32,16 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
         _feature = feature;
         var symbolStyle = (SymbolStyle)style;
         bool drawflag = !symbolStyle.OnlyShowCoordinateForPoint;
-        if (symbolStyle.OnlyShowCoordinateForPoint
-            && (feature is PointFeature || (feature is GeometryFeature geometryFeature && geometryFeature?.Geometry is Point)))
+
+        bool isPoint = feature is PointFeature;
+        if (!isPoint && feature is GeometryFeature geometryFeature)
+        {
+            isPoint = geometryFeature?.Geometry is Point;
+            if (!isPoint && geometryFeature?.Geometry is GeometryCollection gcoll)
+                isPoint = gcoll.Where(g => g is Point).Any();
+        }
+
+        if (symbolStyle.OnlyShowCoordinateForPoint && isPoint)
         {
             drawflag = true;
         }
