@@ -110,7 +110,7 @@ public class VectorStyle : BaseStyle
 
     public class ValueItem
     {
-        public double Value { get; set; }
+        public string? Value { get; set; }
         // The corresponding style
         public IStyle? ValueStyle { get; set; } = null;
     }

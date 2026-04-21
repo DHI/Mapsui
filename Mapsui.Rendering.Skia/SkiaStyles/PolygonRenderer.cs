@@ -51,22 +51,19 @@ internal static class PolygonRenderer
                 columnSuc = vectorStyle.UniqueValueMethod(feature, vectorStyle.UniqueValueField);
                 if (columnSuc)
                 {
-                    if (double.TryParse(feature[vectorStyle.UniqueValueField]?.ToString(), out double val))
+                    var uniqueItem = vectorStyle.UniqueValueItems.Where(cb => cb.Value == feature[vectorStyle.UniqueValueField]?.ToString());
+                    if (uniqueItem != null && uniqueItem.First() != null
+                        && uniqueItem.First().ValueStyle is StyleCollection coll
+                        && coll.Styles.First() is VectorStyle vector)
                     {
-                        var uniqueItem = vectorStyle.UniqueValueItems.Where(cb => cb.Value == val);
-                        if (uniqueItem != null && uniqueItem.First() != null
-                            && uniqueItem.First().ValueStyle is StyleCollection coll
-                            && coll.Styles.First() is VectorStyle vector)
-                        {
-                            uniqueVectorStyle = vector;
-                        }
-
-                        //It means the value has no unique style, then use default style, if default style is setted
-                        if (uniqueVectorStyle == null && vectorStyle.OtherValueStyle != null
-                            && vectorStyle.OtherValueStyle is StyleCollection coll2
-                            && coll2.Styles.First() is VectorStyle defaultStyle)
-                            uniqueVectorStyle = defaultStyle;
+                        uniqueVectorStyle = vector;
                     }
+
+                    //It means the value has no unique style, then use default style, if default style is setted
+                    if (uniqueVectorStyle == null && vectorStyle.OtherValueStyle != null
+                        && vectorStyle.OtherValueStyle is StyleCollection coll2
+                        && coll2.Styles.First() is VectorStyle defaultStyle)
+                        uniqueVectorStyle = defaultStyle;
                 }
 
                 //If uniqueVectorStyle is null, stop drawing the polygon

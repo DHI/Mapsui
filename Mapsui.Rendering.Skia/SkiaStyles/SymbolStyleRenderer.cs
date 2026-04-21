@@ -84,21 +84,18 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                     if (!columnSuc)
                         return;
 
-                    if (double.TryParse(_feature[symbolStyle.UniqueValueField]?.ToString(), out double val))
+                    var uniqueItem = symbolStyle.UniqueValueItems.Where(cb => cb.Value == _feature[symbolStyle.UniqueValueField]?.ToString());
+                    if (uniqueItem != null && uniqueItem.Count() > 0 && uniqueItem.First() != null
+                        && uniqueItem.First().ValueStyle is StyleCollection coll)
                     {
-                        var uniqueItem = symbolStyle.UniqueValueItems.Where(cb => cb.Value == val);
-                        if (uniqueItem != null && uniqueItem.Count() > 0 && uniqueItem.First() != null
-                            && uniqueItem.First().ValueStyle is StyleCollection coll)
-                        {
-                            uniqueStyle = coll.Styles.First();
-                        }
-
-                        //It means the value has no unique style, then use default style, if default style is setted
-                        if (uniqueStyle == null && symbolStyle.OtherValueStyle != null
-                            && symbolStyle.OtherValueStyle is StyleCollection coll2 && coll2.Styles.Count > 0
-                            && coll2.Styles.First() is VectorStyle defaultStyle)
-                            uniqueStyle = defaultStyle;
+                        uniqueStyle = coll.Styles.First();
                     }
+
+                    //It means the value has no unique style, then use default style, if default style is setted
+                    if (uniqueStyle == null && symbolStyle.OtherValueStyle != null
+                        && symbolStyle.OtherValueStyle is StyleCollection coll2 && coll2.Styles.Count > 0
+                        && coll2.Styles.First() is VectorStyle defaultStyle)
+                        uniqueStyle = defaultStyle;
 
                     //If uniqueStyle is null or not vectoeStyle or ImageStyle, stop drawing the point
                     if (uniqueStyle != null)

@@ -65,12 +65,23 @@ public class LabelStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                     if (polygonFeature.Extent is null)
                         return false;
                     var worldCenter = polygonFeature.Extent.Centroid;
-                    if (polygonFeature.Geometry is LineString line)
+                    LineString? line = null;
+                    if (polygonFeature.Geometry is LineString)
+                    {
+                        line = polygonFeature.Geometry as LineString;
+                    }
+                    else if (polygonFeature.Geometry is GeometryCollection gcoll)
+                    {
+                        line = gcoll.Where(g => g is LineString).FirstOrDefault() as LineString;
+                    }
+
+                    if (line != null)
                     {
                         indexedLine = new LengthIndexedLine(line);
                         midIndex = line.Length / 2.0;
                         worldCenter = indexedLine.ExtractPoint(midIndex).ToMPoint();
                     }
+
                     var (polygonCenterX, polygonCenterY) = viewport.WorldToScreenXY(worldCenter.X, worldCenter.Y);
                     DrawLabel(canvas, (float)polygonCenterX, (float)polygonCenterY, labelStyle, text, (float)layer.Opacity, renderService);
                     break;
