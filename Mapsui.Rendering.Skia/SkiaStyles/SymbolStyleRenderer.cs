@@ -123,6 +123,12 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                         //case 2: image source
                         if (uniqueStyle is ImageStyle uniqueImageStyle)
                         {
+                            if (symbolStyle.SymbolScale != uniqueImageStyle.SymbolScale)
+                            {
+                                var factor = (float)(uniqueImageStyle.SymbolScale / symbolStyle.SymbolScale);
+                                canvas.Scale(factor, factor);
+                            }
+
                             using var pathI = renderService.VectorCache.GetOrCreate(symbolStyle.SymbolType, CreatePath);
                             DrawImage(canvas, pathI.Instance, uniqueImageStyle.Image, renderService, opacity);
                         }
@@ -213,6 +219,12 @@ public class SymbolStyleRenderer : ISkiaStyleRenderer, IFeatureSize
                         //case 2: image source
                         if (breakVectorStyle is ImageStyle breakImageStyle)
                         {
+                            if (symbolStyle.SymbolScale != breakImageStyle.SymbolScale)
+                            {
+                                var factor = (float)(breakImageStyle.SymbolScale / symbolStyle.SymbolScale);
+                                canvas.Scale(factor, factor);
+                            }
+
                             using var pathI = renderService.VectorCache.GetOrCreate(symbolStyle.SymbolType, CreatePath);
                             DrawImage(canvas, pathI.Instance, breakImageStyle.Image, renderService, opacity);
                         }
